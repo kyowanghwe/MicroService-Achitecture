@@ -1,0 +1,257 @@
+version: '3.9'
+
+services:
+
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - '9411:9411'
+    networks:
+      - default
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    networks:
+      - default
+
+#  mongodb:
+#    image: mongo
+#    container_name: mongodb
+#    restart: unless-stopped
+#    volumes:
+#      - mongodb:/data
+##      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js
+#    environment:
+#      MONGO_INITDB_ROOT_USERNAME: mongo
+#      MONGO_INITDB_ROOT_PASSWORD: password
+#      MONGO_INITDB_DATABASE: product-service
+#    ports:
+#      - '27017:27017'
+#    networks:
+#      - default
+
+#  mongo-express:
+#    image: mongo-express
+#    container_name: mongo-express
+#    restart: always
+#    ports:
+#      - '8081:8081'
+#    env_file:
+#      - .env
+#    environment:
+#      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_ROOT_USERNAME:-mongo}
+#      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_ROOT_PASSWORD:-password}
+#      ME_CONFIG_MONGODB_SERVER: mongodb
+#    depends_on:
+#      - mongodb
+#    networks:
+#      - default
+
+#  mysql:
+#    image: mysql:5.7
+#    container_name: mysql
+#    restart: unless-stopped
+#    environment:
+#      MYSQL_DATABASE: order-service
+#      MYSQL_USER: mysql
+#      MYSQL_PASSWORD: password
+#      MYSQL_ROOT_PASSWORD: rootPassword
+#    ports:
+#      - '3306:3306'
+#    volumes:
+#      - mysql:/var/lib/mysql
+##      - ./mysql-init.sql:/data/application/mysql-init.sql
+##    command: --init-file /data/application/mysql-init.sql
+#    networks:
+#      - default
+
+  postgres:
+    container_name: postgres
+    image: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      PGDATA: /data/postgres
+    volumes:
+      - postgres:/data/postgres
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql
+    ports:
+      - '5432:5432'
+    networks:
+      - default
+
+#  zookeeper:
+#    image: confluentinc/cp-zookeeper:latest
+#    environment:
+#      ZOOKEEPER_CLIENT_PORT: 2181
+#      ZOOKEEPER_TICK_TIME: 2000
+#    ports:
+#      - 22181:2181
+#
+#  kafka:
+#    image: confluentinc/cp-kafka:latest
+#    depends_on:
+#      - zookeeper
+#    ports:
+#      - 29092:29092
+#    environment:
+#      KAFKA_BROKER_ID: 1
+#      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+#      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  service-registry:
+    container_name: service-registry
+    env_file:
+      - ./service-registry/src/main/resources/.env
+    build:
+      context: ./service-registry
+      dockerfile: Dockerfile
+    ports:
+      - '8761:8761'
+    depends_on:
+      - zipkin
+    networks:
+      - default
+
+  api-gateway:
+    container_name: api-gateway
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    env_file:
+      - ./api-gateway/src/main/resources/.env
+    ports:
+      - '2630:2630'
+    depends_on:
+      - zipkin
+      - service-registry
+      - redis
+    networks:
+      - default
+
+  authentication-service:
+    container_name: authentication-service
+    build:
+      context: ./authentication-service
+      dockerfile: Dockerfile
+    env_file:
+      - ./authentication-service/src/main/resources/.env
+    ports:
+      - '2631:2631'
+    depends_on:
+      - zipkin
+      - service-registry
+      - postgres
+    networks:
+      - default
+
+#  product-service:
+#    container_name: product-service
+#    build:
+#      context: ./product-service
+#      dockerfile: Dockerfile
+#    env_file:
+#      - ./product-service/src/main/resources/.env
+#    ports:
+#      - '2632:2632'
+#    depends_on:
+#      - zipkin
+#      - service-registry
+#      - mongodb
+#    networks:
+#      - default
+#
+#  inventory-service:
+#    container_name: inventory-service
+#    build:
+#      context: ./inventory-service
+#      dockerfile: Dockerfile
+#    env_file:
+#      - ./inventory-service/src/main/resources/.env
+#    ports:
+#      - '2633:2633'
+#    depends_on:
+#      - zipkin
+#      - service-registry
+#      - postgres
+#    networks:
+#      - default
+#
+#  order-service:
+#    container_name: order-service
+#    build:
+#      context: ./order-service
+#      dockerfile: Dockerfile
+#    env_file:
+#      - ./order-service/src/main/resources/.env
+#    ports:
+#      - '2634:2634'
+#    depends_on:
+#      - zipkin
+#      - service-registry
+#      - mysql
+#    networks:
+#      - default
+#
+#  notification-service:
+#    container_name: notification-service
+#    build:
+#      context: ./notification-service
+#      dockerfile: Dockerfile
+#    env_file:
+#      - ./notification-service/src/main/resources/.env
+#    ports:
+#      - '2635:2635'
+#    depends_on:
+#      - zipkin
+#      - kafka
+#    networks:
+#      - default
+#
+#  prometheus:
+#    image: "prom/prometheus"
+#    container_name: prometheus
+#    restart: unless-stopped
+#    volumes:
+#      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+#    ports:
+#      - "9090:9090"
+#    networks:
+#      - default
+#
+#  grafana:
+#    image: "grafana/grafana"
+#    container_name: grafana
+#    restart: unless-stopped
+#    environment:
+#      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+#      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-password}
+#    ports:
+#      - "3000:3000"
+#    links:
+#      - prometheus:prometheus
+#    volumes:
+#      - grafana:/var/lib/grafana
+#    networks:
+#      - default
+
+networks:
+  default:
+    name: api-network
+volumes:
+#  mongodb:
+#  mysql:
+  postgres:
+#  grafana:
